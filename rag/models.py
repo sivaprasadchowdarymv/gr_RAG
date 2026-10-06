@@ -65,6 +65,7 @@ class DocumentIndex:
     figures: List[Node]  # figure nodes (kept separate, as in RAG.py)
     figures_dir: Path
     embed_model: str = ""
+    doc_meta: Dict[str, Any] = field(default_factory=dict)  # title, author, sections, scanned_pages
     # Row i belongs to nodes[i]. Rows are L2-normalised; rows without an
     # embedding are all zeros and flagged False in `has_embedding`.
     embeddings: np.ndarray = field(
@@ -145,6 +146,36 @@ class SourceRef:
     score: Optional[float]
     depth: int
     chunk_idx: int
+    doc_name: str = ""
+    item_id: str = ""  # EQ_3 / TBL_1 / FIG_2 when the source is a specific element
+    agent: str = ""
+    figure_file: str = ""  # figures: file name inside the document's figure folder
+    doc_id: str = ""
+
+
+@dataclass
+class Evidence:
+    """Structured evidence returned by every specialist agent."""
+
+    key: str  # unique: doc_id + node/page/element identity
+    doc_id: str
+    doc_name: str
+    type: str  # text | table | row | pin | equation | figure | metadata | page
+    page: int
+    section: str
+    content: str  # compact text given to the master agent
+    excerpt: str  # what the user sees
+    agent: str  # which specialist found it
+    item_id: str = ""
+    score: float = 0.0  # final ranking score
+    confidence: float = 0.0  # 0..1, relative within this answer
+    parent_ctx: str = ""
+    meta: Dict[str, Any] = field(default_factory=dict)
+    node_index: int = -1
+    depth: int = 0
+    chunk_idx: int = 0
+    figure_file: str = ""
+    ranks: Dict[str, int] = field(default_factory=dict)  # rank per retriever (hybrid, bm25, ...)
 
 
 @dataclass
@@ -170,3 +201,13 @@ class QueryResult:
     steps: List[AgentStep] = field(default_factory=list)
     llm_calls: int = 0
     tokens: int = 0
+    # --- RAG∞ Pro additions (empty in legacy mode) ---------------------------
+    provider: str = ""
+    model: str = ""
+    stage_latency: Dict[str, float] = field(default_factory=dict)  # ms per stage
+    plan: Dict[str, Any] = field(default_factory=dict)
+    verification: Dict[str, Any] = field(default_factory=dict)
+    agent_stats: Dict[str, Dict[str, float]] = field(default_factory=dict)
+    conflicts: List[str] = field(default_factory=list)
+    regenerated: bool = False
+    question: str = ""

@@ -15,11 +15,8 @@ gatherUsageStats = false
 # Never show Python stack traces to visitors (they are still logged on the server)
 showErrorDetails = false
 # Hide developer menu items (Deploy, Rerun settings...) from visitors
-toolbarMode = "minimal"
+toolbarMode = "viewer"  # viewers can switch light/dark theme in ⋮ → Settings
 
-[theme]
-base = "light"
-primaryColor = "#1D5FB8"
-backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F3F6F9"
-textColor = "#17202B"
+# No [theme] section on purpose: any theme option creates a fixed light-based custom
+# theme. Without it, Streamlit follows each viewer's light/dark system setting
+# (switchable in the app menu: ⋮ → Settings).

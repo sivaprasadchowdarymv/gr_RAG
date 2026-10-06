@@ -17,6 +17,21 @@ log = get_logger("tables")
 _PIN_KEYWORDS = ("pin", "port", "signal", "gpio")
 
 
+def _table_caption(page, table) -> str:
+    """Nearest text block above the table (e.g. 'Table 3. Electrical characteristics')."""
+    try:
+        top = table.bbox[1]
+        best, best_gap = "", 80.0
+        for b in page.get_text("blocks") or []:
+            text = str(b[4] or "").strip()
+            gap = top - b[3]
+            if text and 0 <= gap < best_gap:
+                best, best_gap = text, gap
+        return best.split("\n")[0][:150]
+    except Exception:
+        return ""
+
+
 def extract_tables(page) -> List[Dict[str, Any]]:
     tables: List[Dict[str, Any]] = []
     try:
@@ -31,6 +46,7 @@ def extract_tables(page) -> List[Dict[str, Any]]:
         except Exception as exc:
             log.debug("Could not convert a table on page %s: %s", page.number + 1, exc)
             continue
+        caption = _table_caption(page, table)
         headers = [str(h) for h in df.columns]
         header_line = " | ".join(headers)
         rows = [" | ".join(r) for r in df.values.tolist()]
@@ -40,6 +56,7 @@ def extract_tables(page) -> List[Dict[str, Any]]:
                 "content": header_line + "\n" + "\n".join(rows),
                 "rows": rows,
                 "header_line": header_line,
+                "caption": caption,
             }
         )
     return tables
@@ -57,6 +74,7 @@ def table_to_nodes(tbl: Dict[str, Any], page_num: int, section_title: str) -> Li
             content=content,
             raw_content=content,
             page=page_num,
+            caption=tbl.get("caption") or None,
         )
     )
 

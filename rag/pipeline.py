@@ -75,7 +75,7 @@ def _load_or_build(pdf_bytes: bytes, filename: str, settings: Settings, paths: D
                    p_key: str, e_key: str, progress: ProgressFn) -> DocumentIndex:
     cached = vector_store.load_nodes(paths, p_key)
     if cached is not None:
-        nodes, figures, page_count = cached
+        nodes, figures, page_count, doc_meta = cached
         log.info("Loaded index for %s from disk cache", paths.doc_id)
     else:
         paths.ensure()
@@ -83,8 +83,8 @@ def _load_or_build(pdf_bytes: bytes, filename: str, settings: Settings, paths: D
             pdf_bytes, settings, paths.figures_dir,
             progress=(lambda f, m: progress(f * 0.7, m)) if progress else None,
         )
-        nodes, figures, page_count = parsed.nodes, parsed.figures, parsed.page_count
-        vector_store.save_nodes(paths, p_key, nodes, figures, page_count)
+        nodes, figures, page_count, doc_meta = parsed.nodes, parsed.figures, parsed.page_count, parsed.doc_meta
+        vector_store.save_nodes(paths, p_key, nodes, figures, page_count, doc_meta)
         save_document_meta(paths, filename, page_count)
 
     meta = read_json(paths.meta_file, {}) or {}
@@ -96,6 +96,7 @@ def _load_or_build(pdf_bytes: bytes, filename: str, settings: Settings, paths: D
         figures=figures,
         figures_dir=paths.figures_dir,
         embed_model=settings.embed_model,
+        doc_meta=doc_meta,
         has_embedding=np.zeros(len(nodes), dtype=bool),
     )
     loaded = vector_store.load_embeddings(paths, e_key, len(nodes))

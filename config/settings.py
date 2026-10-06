@@ -87,6 +87,26 @@ class Settings:
     max_output_tokens: int  # includes the model's hidden reasoning tokens
     llm_timeout: float
 
+    # --- Providers (free-first; only providers you enable are ever used) ----
+    llm_providers: Tuple[str, ...]  # fallback order, e.g. ("groq", "ollama_cloud")
+    ollama_api_key: str = field(repr=False)  # Ollama Cloud key (secret)
+    ollama_cloud_host: str
+    ollama_local_host: str
+    enable_ollama_local: bool
+    master_model: str  # "" = provider default; applies to the first provider
+    fast_model: str
+    verifier_model: str
+    vision_model: str
+
+    # --- RAG∞ Pro pipeline ----------------------------------------------
+    pipeline_mode: str  # "pro" or "legacy" (the previous single-agent pipeline)
+    rerank: bool
+    rerank_model: str
+    verify_with_llm: bool  # deterministic checks always run; LLM check is optional
+    max_regenerations: int
+    memory_turns: int  # previous Q&A pairs given to the master agent
+    health_weights: Tuple[float, float, float, float, float]  # faith, relevance, citation, grounding, feedback
+
     # --- Agent --------------------------------------------------------------
     agent_mode: str  # "agent" (ReAct with tools) or "quick" (one call)
     agent_max_steps: int  # tool rounds before the agent must answer
@@ -134,9 +154,45 @@ def _writable_dir(preferred: Path) -> Path:
         return fallback
 
 
+def _weights() -> Tuple[float, float, float, float, float]:
+    raw = _env_str("HEALTH_WEIGHTS", "0.30,0.20,0.20,0.20,0.10").split(",")
+    try:
+        vals = [max(0.0, float(x)) for x in raw][:5]
+        if len(vals) == 5 and sum(vals) > 0:
+            total = sum(vals)
+            return tuple(v / total for v in vals)  # type: ignore[return-value]
+    except ValueError:
+        pass
+    return (0.30, 0.20, 0.20, 0.20, 0.10)
+
+
+_KNOWN_PROVIDERS = ("groq", "ollama_cloud", "ollama_local")
+
+
 def load_settings() -> Settings:
     mode = _env_str("AGENT_MODE", "agent").lower()
+    providers = tuple(
+        p.strip().lower() for p in _env_str("LLM_PROVIDERS", "groq,ollama_cloud,ollama_local").split(",")
+        if p.strip().lower() in _KNOWN_PROVIDERS
+    ) or ("groq",)
+    pipeline = _env_str("PIPELINE_MODE", "legacy" if _env_bool("LEGACY_MODE", False) else "pro").lower()
     return Settings(
+        llm_providers=providers,
+        ollama_api_key=(_lookup("OLLAMA_API_KEY") or "").strip(),
+        ollama_cloud_host=_env_str("OLLAMA_CLOUD_HOST", "https://ollama.com"),
+        ollama_local_host=_env_str("OLLAMA_LOCAL_HOST", "http://localhost:11434"),
+        enable_ollama_local=_env_bool("ENABLE_OLLAMA_LOCAL", False),
+        master_model=_env_str("MASTER_MODEL", ""),
+        fast_model=_env_str("FAST_MODEL", ""),
+        verifier_model=_env_str("VERIFIER_MODEL", ""),
+        vision_model=_env_str("VISION_MODEL", ""),
+        pipeline_mode=pipeline if pipeline in {"pro", "legacy"} else "pro",
+        rerank=_env_bool("RERANK", True),
+        rerank_model=_env_str("RERANK_MODEL", "Xenova/ms-marco-MiniLM-L-6-v2"),
+        verify_with_llm=_env_bool("VERIFY_WITH_LLM", False),
+        max_regenerations=_env_int("MAX_REGENERATIONS", 1, 0, 2),
+        memory_turns=_env_int("MEMORY_TURNS", 3, 0, 10),
+        health_weights=_weights(),
         groq_api_key=(_lookup("GROQ_API_KEY") or "").strip(),
         groq_model=_env_str("GROQ_MODEL", "openai/gpt-oss-120b"),
         groq_base_url=_env_str("GROQ_BASE_URL", ""),

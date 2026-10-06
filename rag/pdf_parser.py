@@ -16,7 +16,7 @@ Old RAG.py equivalent: the extraction half of `build_graph()`. Differences:
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
@@ -63,6 +63,7 @@ class ParsedPdf:
     nodes: List[Node]
     figures: List[Node]
     page_count: int
+    doc_meta: Dict = field(default_factory=dict)
 
 
 def parse_pdf(
@@ -93,6 +94,10 @@ def parse_pdf(
         nodes: List[Node] = []
         figures: List[Node] = []
         written_images: Dict[int, str] = {}
+        sections: List[List] = []
+        scanned: List[int] = []
+        first_heading = ""
+        pdf_meta = dict(doc.metadata or {})
 
         for i, page in enumerate(doc):
             page_num = i + 1
@@ -105,6 +110,13 @@ def parse_pdf(
                 text, page_num, settings.max_chunk_tokens, settings.overlap_tokens
             )
             nodes.extend(page_chunks.nodes)
+            for heading in page_chunks.headings:
+                if heading != "General" and len(sections) < 300:
+                    sections.append([heading, page_num])
+            if page_num == 1:  # title = first meaningful line of page 1
+                first_heading = next((ln.strip() for ln in text.split("\n") if 3 < len(ln.strip()) < 120), "")
+            if len(text.strip()) < 25 and page.get_images():
+                scanned.append(page_num)  # image-only page: needs OCR (not available)
 
             # 2. TABLE lane (nearest heading on the page, as in RAG.py)
             table_section = page_chunks.last_heading or "Table"
@@ -140,4 +152,13 @@ def parse_pdf(
     )
     log.info("Extracted %d equations", counts.get("equation", 0))
     log.info("Extracted %d figures", len(figures))
-    return ParsedPdf(nodes=nodes, figures=figures, page_count=total)
+    if scanned:
+        log.info("Scanned/image-only pages (no OCR available): %s", scanned[:20])
+    doc_meta = {
+        "title": (pdf_meta.get("title") or "").strip() or first_heading,
+        "author": (pdf_meta.get("author") or "").strip(),
+        "subject": (pdf_meta.get("subject") or "").strip(),
+        "sections": sections,
+        "scanned_pages": scanned,
+    }
+    return ParsedPdf(nodes=nodes, figures=figures, page_count=total, doc_meta=doc_meta)

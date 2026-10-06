@@ -43,6 +43,35 @@ def _find_caption(page) -> str:
     return ""
 
 
+def _blocks(page):
+    try:
+        return [(pymupdf.Rect(b[:4]), str(b[4] or "").strip()) for b in page.get_text("blocks") or [] if b[6] == 0]
+    except Exception:
+        return []
+
+
+def _caption_and_context(page, rect) -> tuple:
+    """Caption = caption-like text block closest to the image (below preferred);
+    context = other text blocks within ~150 pt of the image."""
+    if rect is None:
+        return _find_caption(page), ""
+    best, best_dist = "", 1e9
+    context = []
+    for brect, text in _blocks(page):
+        if not text:
+            continue
+        below = brect.y0 - rect.y1
+        above = rect.y0 - brect.y1
+        dist = below if below >= -5 else (above + 20 if above >= -5 else 1e9)
+        if _CAPTION_RE.search(text) and 0 <= dist < best_dist and dist < 120:
+            best, best_dist = text, dist
+        elif min(abs(below), abs(above)) < 150:
+            context.append(text)
+    caption = best or _find_caption(page)
+    ctx = " ".join(t for t in context if t != caption)
+    return caption[:200], ctx[:500]
+
+
 def _save_image(doc, xref: int, figures_dir: Path) -> str:
     """Write image `xref` to disk (once) and return its file name."""
     info = doc.extract_image(xref)
@@ -70,7 +99,6 @@ def extract_figures(
 ) -> List[Node]:
     """`written` maps xref -> file name and is shared across pages of one PDF."""
     nodes: List[Node] = []
-    caption = None  # looked up lazily, once per page
 
     for idx, img in enumerate(page.get_images(full=True) or []):
         xref, width, height = img[0], img[2], img[3]
@@ -83,8 +111,15 @@ def extract_figures(
             log.debug("Skipping image xref=%s on page %s: %s", xref, page_num, exc)
             continue
 
-        if caption is None:
-            caption = _find_caption(page)
+        try:
+            rects = page.get_image_rects(xref)
+        except Exception:
+            rects = []
+        rect = rects[0] if rects else None
+        caption, context = _caption_and_context(page, rect)
+        meta = {"context": context}
+        if rect is not None:
+            meta["bbox"] = [round(v, 1) for v in rect]
         nodes.append(
             Node(
                 type="figure",
@@ -95,6 +130,7 @@ def extract_figures(
                 chunk_idx=idx,
                 figure_file=written[xref],
                 caption=caption,
+                meta=meta,
             )
         )
     return nodes

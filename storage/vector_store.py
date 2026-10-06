@@ -37,7 +37,7 @@ from storage.cache import DocumentPaths, read_json, short_hash, write_json_atomi
 
 log = get_logger("vector_store")
 
-INDEX_FORMAT_VERSION = 2  # bump when the node format / extraction changes
+INDEX_FORMAT_VERSION = 3  # bump when the node format / extraction changes
 
 
 def parse_key(settings: Settings) -> str:
@@ -57,6 +57,7 @@ def save_nodes(
     nodes: List[Node],
     figures: List[Node],
     page_count: int,
+    doc_meta: Optional[dict] = None,
 ) -> None:
     write_json_atomic(
         paths.nodes_file(p_key),
@@ -65,20 +66,21 @@ def save_nodes(
             "page_count": page_count,
             "nodes": [n.to_dict() for n in nodes],
             "figures": [f.to_dict() for f in figures],
+            "doc_meta": doc_meta or {},
         },
     )
 
 
 def load_nodes(
     paths: DocumentPaths, p_key: str
-) -> Optional[Tuple[List[Node], List[Node], int]]:
+) -> Optional[Tuple[List[Node], List[Node], int, dict]]:
     raw = read_json(paths.nodes_file(p_key))
     if not raw or raw.get("version") != INDEX_FORMAT_VERSION:
         return None
     try:
         nodes = [Node.from_dict(n) for n in raw["nodes"]]
         figures = [Node.from_dict(f) for f in raw["figures"]]
-        return nodes, figures, int(raw["page_count"])
+        return nodes, figures, int(raw["page_count"]), dict(raw.get("doc_meta") or {})
     except (KeyError, TypeError, ValueError) as exc:
         log.warning("Discarding malformed node cache (%s)", exc)
         return None
