@@ -1,0 +1,25 @@
+# Streamlit server settings (read automatically by `streamlit run app.py`)
+
+[server]
+headless = true
+# Upload limit in MB (the app also enforces MAX_UPLOAD_MB).
+# In Docker this is set from MAX_UPLOAD_MB via STREAMLIT_SERVER_MAX_UPLOAD_SIZE.
+maxUploadSize = 25
+enableXsrfProtection = true
+enableCORS = true
+
+[browser]
+gatherUsageStats = false
+
+[client]
+# Never show Python stack traces to visitors (they are still logged on the server)
+showErrorDetails = false
+# Hide developer menu items (Deploy, Rerun settings...) from visitors
+toolbarMode = "minimal"
+
+[theme]
+base = "light"
+primaryColor = "#1D5FB8"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F3F6F9"
+textColor = "#17202B"
